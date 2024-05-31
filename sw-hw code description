@@ -1,0 +1,363 @@
+
+S/W 설명
+
+1.스케치에 대한 수정 과정의 상세한 설명
+
+우선 크게 “1. 주행 관련 함수, 2. 장애물 탐지 함수, 3. 메인 부분인 루프 함수 4. 기능적인 함수”로 나누어 설명하겠다.
+
+1. 주행 관련 함수 
+앞으로 설명하게 될 함수들은 코드의 간결성을 위해 정의한 코드들이다. 물론 코드의 메인 부분에서 모터 4개에 대한 코드를 씀으로써 아래 함수들을 안쓸 수 있지만 간결성은 현업에서 굉장히 중요한 부분이므로 함수를 따로 정의하게 되었다. 
+void Stop() {
+  motor1.run(RELEASE);
+  motor2.run(RELEASE);
+  motor3.run(RELEASE);
+  motor4.run(RELEASE);
+} 
+위 함수는 멈추는 기능을 가지는 함수로 해당 함수에서는 문제가 발생하지 않았으므로 수정하지 않았다.
+void moveForward() {
+  motor1.run(FORWARD);
+  motor2.run(FORWARD);
+  motor3.run(FORWARD);
+  motor4.run(FORWARD);
+}
+위 함수는 전진 기능을 가진 함수로 전진할때는 큰 문제가 없었기에 수정하지 않았다. 
+void moveBackward() {
+  motor1.run(BACKWARD);
+  motor2.run(BACKWARD);
+  motor3.run(BACKWARD);
+  motor4.run(BACKWARD);
+}
+위 함수는 후진 기능을 가진 함수로 후진할때는 큰 문제가 없었기에 수정하지 않았다. 
+void moveRight() {
+  motor1.setSpeed(115);
+  motor2.setSpeed(115);
+  motor3.setSpeed(115);
+  motor4.setSpeed(115);
+  motor1.run(BACKWARD);
+  motor2.run(BACKWARD);
+  motor3.run(FORWARD);
+  motor4.run(FORWARD);
+}
+위 함수는 우회전 기능을 가진 함수로 우회전시 바퀴가 마찰력으로 인해 멈추는 현상이 테스트를 통해 관찰 
+되었으므로 해당 함수에서 모터 스피드를 기존 셋업보다 올려주어 문제를 해결하였다.
+void moveLeft() {
+    motor1.setSpeed(115);
+  motor2.setSpeed(115);
+  motor3.setSpeed(115);
+  motor4.setSpeed(115);
+  motor1.run(FORWARD);
+  motor2.run(FORWARD);
+  motor3.run(BACKWARD);
+  motor4.run(BACKWARD);
+}
+위 함수는 좌회전 기능을 가진 함수로 좌회전시 바퀴가 마찰력으로 인해 멈추는 현상이 테스트를 통해 관찰 
+되었으므로 해당 함수에서 모터 스피드를 기존 셋업보다 올려주어 문제를 해결하였다.
+
+2. 장애물 탐지 함수 
+다음에 설명하게 될 함수는 장애물을 탐지하는 함수로써 초음파 센서를 SW로 적용하는 함수이다. 
+
+#include <NewPing.h>
+다음은 초음파 센서를 사용하려면 필요한 헤더파일로 따로 불러오게 되었다. 
+#define TRIGGER_PIN A0
+#define ECHO_PIN A1
+#define max_distance 50
+다음은 미리 일정 값을 정의한 상수 명들이다. 
+NewPing sonar(TRIGGER_PIN, ECHO_PIN, max_distance);
+다음은 초음파 센서의 객체를 만들어준 부분이다. 즉 여기서 HW와 SW의 연동이 이루어졌다.
+
+boolean isPathClear() {
+  intdistance = getDistance();
+  if (distance >= 15) {
+    return true;
+  }
+  else {
+    digitalWrite(LED_PIN, HIGH);
+    Stop();
+    delay(100);
+    distance=getDistance();
+    if(distance<15){ //1초동안 계속 장애물이 유지된다면 후진 아니면 전진알고리즘 적용
+      return false;
+    }
+    else {
+      return true;
+    }
+  }
+}
+위 함수는 전방에 장애물이 있는지 확인하는 함수로써 초음파 센서로부터 장애물의 거리를 받아
+오고 그 거리가 15cm미만인 경우 false를 반환하는 기능을 가진 함수이다. 여기서 중요한 점은 
+테스트를 거쳐 실험자의 손이나 여러 오류 상황을 고려했다는 것이다. 초반과 달라진 점은 우선 
+장애물이 임계 거리안에 들어오면 정지를 하고 1초후 다시 거리를 측정하게 해서 만약 그때도 장
+애물이 임계 거리 안에 있다면 그제서야 false를 반환하게하고 아니면 True를 반환하여 오류에 
+대한 대처를 하였다. 
+int getDistance() {
+  delay(50);
+  Int cm = sonar.ping_cm();
+  if (cm == 0) {
+    cm = 100;
+  }
+  returncm;
+}
+위 코드는 함수명 그대로 거리를 반환하는 함수로 sonar라는 객체에 대해 거리를 불러오
+고 거리를 반환하게 하였다. 여기서 발생할 수 있는 오류를 제거하기 위해 거리가 0으로 
+측정될 경우 100cm로 수정하여 반환하도록 조치하였다.
+
+3. 메인부분인 루프 함수 
+다음 설명할 부분은 셋업 함수와 메인인 루프 함수이다. 셋업 함수란 핀번호의 역할을 정해주고 모터의 스피드 등 여러 가지 기본 세팅을 하는 부분이며, 루프 함수란 계속 함수 자신을 반복하는 기능을 수행하는 함수이다. 
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(irLeft, INPUT);
+  pinMode(irRight, INPUT);
+  pinMode(irbLeft, INPUT);
+  pinMode(irbRight, INPUT);
+  pinMode(LED_PIN,OUTPUT);
+ 
+  motor1.setSpeed(93);
+    motor2.setSpeed(93);
+    motor3.setSpeed(93);
+    motor4.setSpeed(93);
+}
+위 셋업함수를 보면 serial 통신속도를 정하는 serial.begin과 핀모드를 설정하는 부분으로 구성되어있다. 
+IrLeft~irbRight를 모드 pinMode함수를 이용해 input으로 설정하였는데 이는 적외선 센서 부분에 해당한
+다. 그 다음 Led_pin은 LED를 조정하는 pin으로 OUTPUT으로 설정하여 + 전기 신호를 방출하도록 하였다. 
+여기서 중요한점은 모터 쉴드의 핀 개수가 부족하여 서보 모터 핀까지 사용했다는 점이다. 서보 모터 핀도 
+역시나 전기적 핀이기에 여타 다른 핀과 동일하게 사용해도 문제없다는 것을 이용하였다.
+void loop() {
+  if (isPathClear()) {
+    if (digitalRead(irLeft)== 0&& digitalRead(irRight)== 0) {
+      moveForward();
+    } else if (digitalRead(irLeft)== 0&& digitalRead(irRight)== 1) {
+      Serial.println("TL");
+      moveLeft();
+    } else if (digitalRead(irLeft)== 1&& digitalRead(irRight)== 0 ){
+      Serial.println("TR");
+      moveRight();
+    } else if (digitalRead(irLeft)== 1&& digitalRead(irRight)== 1) {
+      Stop();
+      delay(100);
+    }
+  } else {
+    motor1.setSpeed(93);
+    motor2.setSpeed(93);
+    motor3.setSpeed(93);
+    motor4.setSpeed(93);
+    intcheck=0;
+    while (1) {
+       digitalWrite(LED_PIN, HIGH);
+      
+      bLeftValue = digitalRead(irbLeft);
+      bRightValue = digitalRead(irbRight);
+      if (bLeftValue == 0&& bRightValue == 0) {
+        moveBackward();
+      } else if (bLeftValue == 0&& bRightValue == 1) {
+        motor1.run(BACKWARD);
+        motor2.run(BACKWARD);
+        motor3.run(FORWARD);
+        motor4.run(FORWARD);
+      } else if (bLeftValue == 1&& bRightValue == 0) {
+        motor1.run(FORWARD);
+        motor2.run(FORWARD);
+        motor3.run(BACKWARD);
+        motor4.run(BACKWARD);
+      } else {
+        Stop();
+        dest();
+        delay(1000);
+        //여기에 종료음 넣을 예정
+        break;
+      }
+    }
+   digitalWrite(LED_PIN, LOW);
+  }
+}
+위의 루프함수를 설명하면 우선 isPathClear함수가 True 일때와 아닐때로 구분되어있는 것을 볼 수 있다. 
+우리는 후진이라는 기능을 택하였기에 위 작업은 필연적이였다. 바로 전진시에 후방 적외선 센서의 간섭문
+제와 후진시의 전방 적외선 센서의 간섭문제이다. 이를 해결하기위해 isPathCLear함수를 도입하여 만약 장
+애물이 감지되면 else를 따라 후진하게 하였다. 그리고 후진시 루프 한번 돌때마다 LED가 점멸하게 하여 
+심미적으로 보이게 하였다. 그리고 전진 후진시 적외선 센서를 이용하여 왼쪽 적외선이 1을 출력하면 왼쪽
+으로 반대의 경우에는 반대로 가게 하였다. 그리고 마지막 도착시에 좌우 적외선 센서가 1을 리턴시 멈추고 
+dest()함수를 호출하고 10초 후 while문을 탈출하여 처음 세팅으로 돌아가게하였다 이렇게 함으로써 
+테스트를 쉽게하였다.
+
+4. 기능적인 함수
+다음에 설명할 함수는 dest()함수로 도착시 LED를 점멸하게 하는 함수이다.
+
+void dest() { 
+  intcnt=0;
+  
+  while(cnt<30){
+  digitalWrite(LED_PIN, HIGH);
+  delay(500);
+  digitalWrite(LED_PIN, LOW);
+  delay(500);
+  cnt+=1;
+  }
+}
+
+위 함수는 도착시 LED를 500ms간격으로 30번 점멸하는 기능을 가진 함수이다.
+
+
+
+
+다음은 전체 코드이다.
+#include <NewPing.h>
+#include <AFMotor.h>
+// hc-sr04 sensor
+#define TRIGGER_PINA0
+#define ECHO_PINA1
+#define max_distance 50
+// ir sensor
+#define irLeftA5
+#define irRightA4  
+#define irbLeftA2
+#define irbRightA3
+#define LED_PIN 10
+#define SPEAKER_PIN 11
+
+NewPing sonar(TRIGGER_PIN, ECHO_PIN, max_distance);
+AF_DCMotor motor1(1, MOTOR12_1KHZ);
+AF_DCMotor motor2(4, MOTOR12_1KHZ);
+AF_DCMotor motor3(2, MOTOR34_1KHZ);
+AF_DCMotor motor4(3, MOTOR34_1KHZ);
+intdistance = 0;
+intleftDistance;
+intrightDistance;
+boolean object;
+intbLeftValue;
+intbRightValue;
+void setup() {
+  Serial.begin(9600);
+  pinMode(irLeft, INPUT);
+  pinMode(irRight, INPUT);
+  pinMode(irbLeft, INPUT);
+  pinMode(irbRight, INPUT);
+  pinMode(LED_PIN,OUTPUT);
+ 
+  motor1.setSpeed(93);
+    motor2.setSpeed(93);
+    motor3.setSpeed(93);
+    motor4.setSpeed(93);
+}
+void loop() {
+  if (isPathClear()) {
+    if (digitalRead(irLeft)== 0&& digitalRead(irRight)== 0) {
+      moveForward();
+    } else if (digitalRead(irLeft)== 0&& digitalRead(irRight)== 1) {
+      Serial.println("TL");
+      moveLeft();
+    } else if (digitalRead(irLeft)== 1&& digitalRead(irRight)== 0 ){
+      Serial.println("TR");
+      moveRight();
+    } else if (digitalRead(irLeft)== 1&& digitalRead(irRight)== 1) {
+      Stop();
+      delay(100);
+    }
+  } else {
+    motor1.setSpeed(93);
+    motor2.setSpeed(93);
+    motor3.setSpeed(93);
+    motor4.setSpeed(93);
+    intcheck=0;
+    while (1) {
+       digitalWrite(LED_PIN, HIGH);
+      
+      bLeftValue = digitalRead(irbLeft);
+      bRightValue = digitalRead(irbRight);
+      if (bLeftValue == 0&& bRightValue == 0) {
+        moveBackward();
+      } else if (bLeftValue == 0&& bRightValue == 1) {
+        motor1.run(BACKWARD);
+        motor2.run(BACKWARD);
+        motor3.run(FORWARD);
+        motor4.run(FORWARD);
+      } else if (bLeftValue == 1&& bRightValue == 0) {
+        motor1.run(FORWARD);
+        motor2.run(FORWARD);
+        motor3.run(BACKWARD);
+        motor4.run(BACKWARD);
+      } else {
+        Stop();
+        dest();
+        delay(1000);
+        //여기에 종료음 넣을 예정
+        break;
+      }
+    }
+   digitalWrite(LED_PIN, LOW);
+  }
+}
+void dest() { 
+  intcnt=0;
+  
+  while(cnt<30){
+  digitalWrite(LED_PIN, HIGH);
+  delay(500);
+  digitalWrite(LED_PIN, LOW);
+  delay(500);
+  cnt+=1;
+  }
+}
+boolean isPathClear() {
+  intdistance = getDistance();
+  if (distance >= 15) {
+    return true;
+  }
+  else {
+    digitalWrite(LED_PIN, HIGH);
+    Stop();
+    delay(100);
+    distance=getDistance();
+    if(distance<15){ //1초동안 계속 장애물이 유지된다면 후진 아니면 전진알고리즘 적용
+      return false;
+    }
+    else {
+      return true;
+    }
+  }
+}
+int getDistance() {
+  delay(50);
+  intcm = sonar.ping_cm();
+  if (cm == 0) {
+    cm = 100;
+  }
+  returncm;
+}
+void Stop() {
+  motor1.run(RELEASE);
+  motor2.run(RELEASE);
+  motor3.run(RELEASE);
+  motor4.run(RELEASE);
+}
+void moveForward() {
+  motor1.run(FORWARD);
+  motor2.run(FORWARD);
+  motor3.run(FORWARD);
+  motor4.run(FORWARD);
+}
+void moveBackward() {
+  motor1.run(BACKWARD);
+  motor2.run(BACKWARD);
+  motor3.run(BACKWARD);
+  motor4.run(BACKWARD);
+}
+void moveRight() {
+  motor1.setSpeed(115);
+  motor2.setSpeed(115);
+  motor3.setSpeed(115);
+  motor4.setSpeed(115);
+  motor1.run(BACKWARD);
+  motor2.run(BACKWARD);
+  motor3.run(FORWARD);
+  motor4.run(FORWARD);
+}
+void moveLeft() {
+    motor1.setSpeed(115);
+  motor2.setSpeed(115);
+  motor3.setSpeed(115);
+  motor4.setSpeed(115);
+  motor1.run(FORWARD);
+  motor2.run(FORWARD);
+  motor3.run(BACKWARD);
+  motor4.run(BACKWARD);
+}
